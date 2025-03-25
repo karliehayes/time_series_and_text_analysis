@@ -1,0 +1,166 @@
+---
+title: "ESM 244 Assignment 4 Task 1"
+author: "Karlie Hayes"
+format: 
+  html:
+    embed-resources: true
+    code-fold: show
+    toc: true
+warning: false 
+editor: visual
+---
+
+## Data overview and purpose
+
+![](images/clipboard-3191807203.png){width="464"}
+
+**Willamette Falls, Oregon** (Credit: [National Parks Service](https://www.nps.gov/places/willamette-falls.htm))
+
+### Purpose
+
+The purpose of this analysis is to explore time series data from for adult fish passage through Willamette Falls, Oregon. This analysis creates an original time series, season plot, and figure of annual totals for fish passage through Willamette Falls.
+
+### Data overview
+
+The Columbia DART (Data Access in Real Time) is an interactive data resource which provides data on Columbia River Basin fish populations. DART provides daily data on the passage of various fish, including Coho, Jack Coho, and Steelhead. The current project uses data collected from 2001 to 2010 at the Willamette Falls fish ladder in Oregon.
+
+### Data Citation
+
+University of Washington School of Aquatic and Fishery Sciences, Columbia Basin Research, Columbia River DART (Data Access in Real Time). \[Internet\]. \[accessed 1/25/2023\]. Available from <https://www.cbr.washington.edu/dart/query/adult_graph_text>.
+
+### Pseudocode
+
+1.  Read in Columbia River DART data.
+2.  Clean data by selecting relevant data, pivoting, addressing missing values, and converting data to a tsibble.
+3.  Create original time series showing passage for all 3 species, using facet_wrap.
+4.  Create seasonplot for each species, grouping data by month and species.
+5.  Create a figure of annual totals for fish passage, by summarizing data by species.
+
+## Time series summary
+
+```{r}
+library(tidyverse)
+library(tsibble)
+library(feasts)
+library(fable)
+library(patchwork)
+
+wil_df <- read_csv("willamette_fish_passage.csv")
+```
+
+### Data cleaning
+
+Data was cleaned such that only the relevant data was selected (the date column, and each of the three species). Furthermore, the data was converted to tidy format through pivoting, was formatted as a tsibble, and NA values were replaced with 0.
+
+```{r}
+wil_ts <- wil_df |>
+  select("Date", "Coho", "Jack Coho", "Steelhead") |>
+  pivot_longer(cols = !"Date",
+               names_to = "Species",
+               values_to = "Passage") |>
+  mutate(Date = mdy(Date)) |>
+  mutate_at("Passage", ~replace_na(.,0)) |>
+  as_tsibble(key = c(Species, Passage),
+             index = Date) 
+```
+
+### Original time series
+
+A time series plot showing daily passage of adult salmon through Willamette Falls was created. Facet Wrap was used to divide data by species into separate panels.
+
+```{r}
+#| fig-cap: "**Figure 1. Adult salmon passage though Willamette Falls, by species.** Lines indicate daily passage of adult salmon (fish/day)."
+ggplot(data = wil_ts, aes(x = Date, y = Passage)) +
+  geom_line() +
+  facet_wrap(~Species, ncol = 1, scales = "free_y") +
+  labs(x = "Date",
+       y = "Adult passage (fish/day)") +
+  theme_minimal()
+```
+
+#### Summary
+
+-   The passage of Coho salmon has a trend such that passage of fish per day has increased over time.
+
+-   Fewer Jack Coho salmon pass through Willamette Falls than Coho or Steelhead salmon.
+
+### Seasonplot
+
+A seasonplot showing the monthly salmon passage through Willamette Falls by year was created. Data was grouped by species and month. A seasonplot was used to show fish passage by year.
+
+```{r}
+#| fig-cap: "**Figure 2. Monthly salmon passage counts through Willamette Falls from 2000 to 2010, by species.** Line color represents year. Peak passage month varies by species. Seasonality appears consistent throughout the time frame."
+
+wil_month <- wil_ts |>
+  group_by(Species) |>
+  index_by(monthly = ~yearmonth(.)) |> # group by species and month
+  summarize(annual_passage = sum(Passage, na.rm = TRUE)) |> 
+  ungroup()
+
+wil_month |>
+  feasts::gg_season(y = annual_passage, pal = hcl.colors(n = 9)) +
+  facet_wrap(~Species, ncol = 1, scales = "free_y") + # set scales to y-axis varies with the data
+  theme_minimal() +
+  labs(x = "Month",
+       y = "Adult passage (fish/day)")
+```
+
+#### Summary
+
+-   The highest passage for Steelhead is in May and June, while the highest passage for Coho and Jack Coho is in September.
+
+-   Steelhead passage extends for almost half the year, with passage gradually increasing from January to June. In contrast, passage of Coho and Jack Coho is limited to a shorter season (August to November)
+
+-   Salmon passage appears seasonal for all species.
+
+### Annual counts by species
+
+```{r}
+#| fig-cap: "**Figure 3. Annual totals for fish passage, by species.** Yearly fish passage counts are shown for Coho, Jack Coho, and Steelhead salmon species."
+# coho
+wil_annual_coho <- wil_ts |>
+  filter(Species == "Coho") |>
+  index_by(yearly = ~year(.)) |>
+  summarize(annual_passage = sum(Passage, na.rm = TRUE)) |>
+  ungroup()
+
+coho_yearly <- ggplot(data = wil_annual_coho, aes(x = yearly, y = annual_passage)) +
+  geom_line() +
+  labs(title = "Coho", x = "", y = "") +
+  scale_x_continuous(breaks = wil_annual_coho$yearly) +
+  theme_bw()
+
+# jack coho
+wil_annual_jcoho <- wil_ts |>
+  filter(Species == "Jack Coho") |>
+  index_by(yearly = ~year(.)) |>
+  summarize(annual_passage = sum(Passage, na.rm = TRUE)) |>
+  ungroup()
+
+jcoho_yearly <- ggplot(data = wil_annual_jcoho, aes(x = yearly, y = annual_passage)) +
+  geom_line() +
+  labs(title = "Jack Coho", x = "", y = "Annual adult passage (fish/year)") +
+  scale_x_continuous(breaks = wil_annual_jcoho$yearly) +
+  theme_bw()
+
+# steelhead
+wil_annual_steel <- wil_ts |>
+  filter(Species == "Steelhead") |>
+  index_by(yearly = ~year(.)) |>
+  summarize(annual_passage = sum(Passage, na.rm = TRUE)) |>
+  ungroup()
+
+steel_yearly <- ggplot(data = wil_annual_steel, aes(x = yearly, y = annual_passage)) +
+  geom_line() +
+  labs(title = "Steelhead", x = "Year", y = "") +
+  scale_x_continuous(breaks = wil_annual_steel$yearly) +
+  theme_bw()
+
+coho_yearly / jcoho_yearly / steel_yearly
+```
+
+#### Summary
+
+-   Annual Steelhead passage decreased over time, while annual Coho passage increased over time.
+
+-   Jack Coho passage decreased between 2004-2007, but passage increased again after 2008.

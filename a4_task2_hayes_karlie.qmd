@@ -1,0 +1,121 @@
+---
+title: "ESM 244 Homework 4 Task 2"
+author: "Karlie Hayes"
+format: 
+  html:
+    embed-resources: true
+    code-fold: show
+    toc: true
+warning: false 
+editor: visual
+---
+
+## Data overview and purpose
+
+![](images/clipboard-1130405815.png)
+
+**President Trump argues with President Zelensky** (Credit: [New York Times](https://www.nytimes.com/2025/03/03/podcasts/the-daily/zelensky-trumps-oval-office.html))
+
+### Data overview
+
+The Daily is a New York Times podcast which uses interview, long-form content to review news events. The March 3, 2025 Daily episode ("The Fallout From Zelensky and Trump's Oval Office Meltdown") is a conversation between host Michael Barbaro and NYT White House Correspondent, Peter Baker. Barbaro and Baker discuss the highly publicized argument between President Trump and Ukrainian President Zelensky which took place in front of press in the Oval Office. Accessed from the New York Times website, the podcast transcript was copied and saved as a .txt file.
+
+### Purpose
+
+News organizations are criticized for presenting biased information. Thus, the purpose of this analysis was to examine word count and sentiment from a recent episode of a popular news podcast. This analysis rangled and analyzed the transcript from "The Fallout From Zelensky and Trump's Oval Office Meltdown." Specifically, this analysis found the count of most frequently used words, grouped by speaker. A sentiment analysis, grouped by speaker, was also performed.
+
+### Data Citation
+
+New York Times, The Daily, "The Fallout From Zelensky and Trump's Oval Office Meltdown." \[Internet\]. \[accessed 3/18/2025\]. Available from <https://www.nytimes.com/2025/03/03/podcasts/the-daily/zelensky-trumps-oval-office.html>.
+
+### Pseudocode
+
+1.  Read in txt data.
+2.  Wrangle data for tidy format, such that text is grouped by speaker and stop words are removed.
+3.  Create a column graph showing top words.
+4.  Perform sentiment analysis.
+5.  Create a visualization for sentiment analysis.
+
+## Daily news podcast transcript analysis
+
+```{r}
+library(tidyverse)
+library(tidytext)
+daily_text <- read_delim("thedaily.txt", delim = "\t")
+```
+
+### Wrangling for tidy format
+
+Text data was wrangled to tidy format. Irrelevant lines (such as title lines) were filtered out. Lines were grouped by speaker. Data was converted to word format, and stop words were removed.
+
+```{r}
+daily_clean <- data.frame(daily_text) |>
+  filter(str_detect(Text, "MUSIC") == FALSE)  |>
+  filter(str_detect(Text, "Archived") == FALSE)  |>
+  mutate(speaker = case_when(
+    str_detect(Text, "Barbaro") ~ "Barbaro",
+    str_detect(Text, "Baker") ~ "Baker",
+    str_detect(Text, "(Donald Trump)") ~ "Trump",
+    str_detect(Text, "(Jd Vance)") ~ "Vance",
+    str_detect(Text, "(Volodymyr Zelenskyy)") ~ "Zelensky",
+    str_detect(Text, "(Lindsey Graham)") ~ "Graham"
+  )) |>
+  fill(speaker, .direction ='down')  |>
+  filter(str_detect(Text, "Michael Barbaro") == FALSE)  |>
+  filter(str_detect(Text, "Peter Baker") == FALSE)
+
+# individual words
+daily_words <- daily_clean |>
+  unnest_tokens(word, Text) |>
+  anti_join(stop_words, by = 'word')
+
+```
+
+### Top words
+
+The analysis selected the top ten words spoken by each speaker. A facet wrap graph was created showing top words by speaker.
+
+```{r}
+#| fig-cap: "**Figure 1. Counts of most frequently used words, by speaker.** Bar length indicates the number of times a word was spoken."
+top_10_words <- daily_words |>
+  filter(str_detect(word, str_to_lower(speaker)) == FALSE) |> # removed each speaker's own name
+  count(word, speaker) |>
+  group_by(speaker) |>
+  arrange(speaker, desc(n)) %>% 
+  slice(1:10) %>%
+  mutate(word = factor(word, levels = word[order(n, decreasing = TRUE)]))|> # make word a factor
+  ungroup() 
+
+
+ggplot(data = top_10_words, aes(x = n, y = word)) +
+  geom_col(fill = "#3dc1ee") +
+  facet_wrap(~speaker, scales = "free") +
+  labs(x = "Count (number of times spoken)", y = "Word") +
+  theme_bw()
+```
+
+#### Summary
+
+In this podcast episode, speakers commonly spoke the names of two characters in the news event: Zelensky and Trump. For example, the most frequent word spoken by Baker, Barbaro, and Zelensky was "Trump." Other common words included "Ukraine" and "don't."
+
+### Sentiment analysis
+
+```{r}
+#| fig-cap: "**Figure 2. Sentiment analysis for the Daily transcript, by speaker.** Bar length indicates the number of times a positive or negative word was spoken."
+bing_lex <- get_sentiments(lexicon = "bing")
+
+daily_bing <- daily_words %>% 
+  inner_join(bing_lex, by = 'word') 
+
+ggplot(data = daily_bing, aes(x = sentiment)) +
+  geom_bar(fill = "#3dc1ee") +
+  facet_wrap(~speaker) +
+  labs(x = "Sentiment", y = "Count (number of words spoken") +
+  theme_bw()
+
+
+```
+
+#### Summary
+
+In the podcast episode, all speakers had a similar number of positive and negative words spoken. Baker, Barbaro, and Zelensky each spoke more positive words compared to negative words. Graham and Trump each spoke more negative words compared to positive words.
